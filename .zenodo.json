@@ -1,0 +1,19 @@
+{
+    "license": "MIT",
+    "title": "Reproducibility repository for Conserving mass, momentum, and energy for the Benjamin-Bona-Mahony, Korteweg-de Vries, and nonlinear Schrödinger equations",
+    "upload_type": "software",
+    "creators": [
+        {
+            "affiliation": "Institute of Mathematics, Johannes Gutenberg University Mainz, Germany",
+            "name": "Ranocha, Hendrik",
+            "orcid": "0000-0002-3456-2277"
+        },
+        {
+	    "affiliation": "King Abdullah University of Science and Technology",
+            "name": "David I. Ketcheson",
+            "orcid": "0000-0002-1212-126X"
+        }
+    ],
+    "access_right": "open"
+}
+

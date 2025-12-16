@@ -32,9 +32,23 @@ use the implementations provided here, please **also** cite this repository as
 }
 ```
 
+
 ## Abstract
 
-TODO
+Many important partial differential equations (PDEs) possess multiple invariant
+quantities whose values characterize solutions in an essential way. Specially
+designed (structure-preserving) numerical methods are capable of preserving one
+or sometimes two invariants, often corresponding to mass, momentum, or energy.
+However, many important systems possess additional invariants, and completely
+integrable systems possess an infinite number of them.
+We propose and study a class of numerical discretizations that are capable of
+preserving several polynomial invariants. In space, we use Fourier Galerkin methods,
+while in time we use a combination of orthogonal projection and relaxation. We prove
+and numerically demonstrate the conservation properties of the method by applying it
+to the Benjamin-Bona-Mahoney, Korteweg-de Vries, and nonlinear Schrödinger (NLS) PDEs
+as well as a hyperbolic approximation of NLS. For each of these equations, we are
+able to conserve mass, momentum, and energy up to numerical precision. We show that
+this conservation leads to reduced growth of numerical errors for long-term simulations.
 
 
 ## Numerical experiments

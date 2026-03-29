@@ -54,6 +54,20 @@ function fit_order(Ns, errors)
     return -c[2]
 end
 
+function fit_power(Ns, errors)
+    A = hcat(ones(length(Ns)), log.(Ns))
+    c = A \ log.(errors)
+    logC, p = c
+    return exp(logC), p
+end
+
+function fit_exponential(Ns, errors)
+    A = hcat(ones(length(Ns)), Ns)
+    c = A \ log.(errors)
+    logC, minusα = c
+    return exp(logC), -minusα
+end
+
 change(x) = x .- first(x)
 function relative_change(x)
     return (x .- first(x)) ./ abs(first(x))
@@ -1127,6 +1141,22 @@ function solitary_wave(t, x::Number, equation::BBM)
     return 1 + A / cosh(K * x_t)^2
 end
 domain(::typeof(solitary_wave), ::BBM) = (xmin = -90.0, xmax = 90.0)
+
+function negative_solitary_wave(t, x::Number, equation::BBM)
+    (; xmin, xmax) = domain(negative_solitary_wave, equation)
+
+    c = -5.0
+    A = 3 * (c - 1)
+    K = 0.5 * sqrt(1 - 1 / c)
+    x_t = mod(x - c * t - xmin, xmax - xmin) + xmin
+
+    # There are two normalizations of the BBM equation:
+    # 1. u_t - u_{txx} + u_x + u u_x = 0
+    # return A / cosh(K * x_t)^2
+    # 2. u_t - u_{txx} + u u_x = 0
+    return 1 + A / cosh(K * x_t)^2
+end
+domain(::typeof(negative_solitary_wave), ::BBM) = (xmin = -50.0, xmax = 50.0)
 
 """
     periodic_wave(t, x::Number, equation::BBM)
@@ -2863,6 +2893,187 @@ function semidiscrete_conservation()
     return nothing
 end
 
+function convergence_in_space()
+    fig = Figure(size = (1200, 350)) # default size is (600, 450)
+
+    ax_bbm = Axis(fig[1, 1]; yscale = log10,
+                  xlabel = L"Number of nodes $N$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "BBM equation")
+    ax_kdv = Axis(fig[1, 2]; yscale = log10,
+                  xlabel = L"Number of nodes $N$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "KdV equation")
+    ax_nls = Axis(fig[1, 3]; yscale = log10,
+                  xlabel = L"Number of nodes $N$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "NLS equation")
+
+    linkyaxes!(ax_bbm, ax_kdv, ax_nls)
+    hideydecorations!(ax_kdv; grid = false)
+    hideydecorations!(ax_nls; grid = false)
+
+    @info "BBM equation"
+    let ax = ax_bbm
+        initial_condition = negative_solitary_wave
+        equation = BBM()
+        Ns = round.(Int, range(50, 400, length = 10))
+        tspan = (0.0, 10.0)
+        dt = (tspan[end] - tspan[begin]) / 2^14
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        for N in Ns
+            D = fourier_derivative_operator(xmin, xmax, N)
+
+            (; q0, parameters) = setup(initial_condition, equation,
+                                       FourierGalerkin(), tspan, D)
+
+            @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                rhs_nonstiff!,
+                                q0, tspan, parameters, alg;
+                                dt)
+
+            # Compute relative L^2 error at the final time
+            p_D_small = parameters.D_small
+            p_tmp1_small = parameters.tmp1_small
+
+            x = grid(p_D_small)
+            t = sol.t[end]
+            p_D_small.tmp .= sol.u[end] ./ size(p_D_small, 2)
+            mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+            @. p_tmp1_small = (p_tmp1_small - initial_condition(t, x, equation))^2
+            err = sqrt(integrate(p_tmp1_small, p_D_small))
+            @. p_tmp1_small = initial_condition(t, x, equation)^2
+            rel = sqrt(integrate(p_tmp1_small, p_D_small))
+            push!(errors, err / rel)
+        end
+
+        scatter!(ax, Ns, errors; label = "numerical")
+
+        idx = 1:length(Ns)
+        c, α = fit_exponential(Ns[idx], errors[idx])
+        @info "Convergence fit c exp(-α N)" c α
+        lines!(ax, Ns[idx], c .* exp.(-α * Ns[idx]);
+               label = L"fit $c \, \mathrm{e}^{-\alpha N}$")
+
+        axislegend(ax; position = :rt, framevisible = false, nbanks = 1)
+    end
+
+    @info "KdV equation"
+    let ax = ax_kdv
+        initial_condition = two_solitons
+        equation = KdV()
+        Ns = round.(Int, range(100, 1100, length = 10))
+        tspan = (0.0, 100.0)
+        dt = (tspan[end] - tspan[begin]) / 2^15
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        for N in Ns
+            D = fourier_derivative_operator(xmin, xmax, N)
+
+            (; q0, parameters) = setup(initial_condition, equation,
+                                       FourierGalerkin(), tspan, D)
+
+            @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                rhs_nonstiff!,
+                                q0, tspan, parameters, alg;
+                                dt)
+
+            # Compute relative L^2 error at the final time
+            p_D_small = parameters.D_small
+            p_tmp1_small = parameters.tmp1_small
+
+            x = grid(p_D_small)
+            t = sol.t[end]
+            p_D_small.tmp .= sol.u[end] ./ size(p_D_small, 2)
+            mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+            @. p_tmp1_small = (p_tmp1_small - initial_condition(t, x, equation))^2
+            err = sqrt(integrate(p_tmp1_small, p_D_small))
+            @. p_tmp1_small = initial_condition(t, x, equation)^2
+            rel = sqrt(integrate(p_tmp1_small, p_D_small))
+            push!(errors, err / rel)
+        end
+
+        scatter!(ax, Ns, errors; label = "numerical")
+
+        idx = 1:length(Ns)
+        c, α = fit_exponential(Ns[idx], errors[idx])
+        @info "Convergence fit c exp(-α N)" c α
+        lines!(ax, Ns[idx], c .* exp.(-α * Ns[idx]);
+               label = L"fit $c \, \mathrm{e}^{-\alpha N}$")
+
+        axislegend(ax; position = :rt, framevisible = false, nbanks = 1)
+    end
+
+    @info "NLS equation"
+    let ax = ax_nls
+        initial_condition = two_solitons
+        equation = CubicNLS(get_β(initial_condition))
+        Ns = round.(Int, range(100, 1300, length = 10))
+        tspan = (0.0, 1.0)
+        dt = (tspan[end] - tspan[begin]) / 2^14
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        for N in Ns
+            D = fourier_derivative_operator(xmin, xmax, N)
+
+            (; q0, parameters) = setup(initial_condition, equation,
+                                       FourierGalerkin(), tspan, D)
+
+            @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                rhs_nonstiff!,
+                                q0, tspan, parameters, alg;
+                                dt)
+
+            # Compute relative L^2 error at the final time
+            p_D_small = parameters.D_small
+            p_tmp1_small = parameters.tmp1_small
+            p_tmp2_small = parameters.tmp2_small
+
+            x = grid(p_D_small)
+            t = sol.t[end]
+            v = real(sol.u[end], equation)
+            w = imag(sol.u[end], equation)
+            p_D_small.tmp .= v ./ size(p_D_small, 2)
+            mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+            p_D_small.tmp .= w ./ size(p_D_small, 2)
+            mul!(p_tmp2_small, p_D_small.brfft_plan, p_D_small.tmp)
+            for i in eachindex(x, p_tmp1_small, p_tmp2_small)
+                ic = initial_condition(t, x[i], equation)
+                p_tmp1_small[i] = (p_tmp1_small[i] - real(ic))^2 + (p_tmp2_small[i] - imag(ic))^2
+            end
+            err = sqrt(integrate(p_tmp1_small, p_D_small))
+            @. p_tmp1_small = abs2(initial_condition(t, x, equation))
+            rel = sqrt(integrate(p_tmp1_small, p_D_small))
+            push!(errors, err / rel)
+        end
+
+        scatter!(ax, Ns, errors; label = "numerical")
+
+        idx = 1:length(Ns)
+        c, α = fit_exponential(Ns[idx], errors[idx])
+        @info "Convergence fit c exp(-α N)" c α
+        lines!(ax, Ns[idx], c .* exp.(-α * Ns[idx]);
+               label = L"fit $c \, \mathrm{e}^{-\alpha N}$")
+
+        axislegend(ax; position = :rt, framevisible = false, nbanks = 1)
+    end
+
+    filename = joinpath(FIGDIR, "convergence_in_space.pdf")
+    save(filename, fig)
+    @info "Results saved to $filename"
+    return nothing
+end
+
 function  fully_discrete_conservation_two_waves()
     fig = Figure(size = (1200, 650)) # default size is (600, 450)
 
@@ -3159,6 +3370,229 @@ function  fully_discrete_conservation_one_wave()
     end
 
     filename = joinpath(FIGDIR, "fully_discrete_conservation_one_wave.pdf")
+    save(filename, fig)
+    @info "Results saved to $filename"
+    return nothing
+end
+
+function convergence_in_time()
+    fig = Figure(size = (1200, 350)) # default size is (600, 450)
+
+    ax_bbm = Axis(fig[1, 1]; xscale = log10, yscale = log10,
+                  xlabel = L"Time step size $\Delta t$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "BBM equation")
+    ax_kdv = Axis(fig[1, 2]; xscale = log10, yscale = log10,
+                  xlabel = L"Time step size $\Delta t$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "KdV equation")
+    ax_nls = Axis(fig[1, 3]; xscale = log10, yscale = log10,
+                  xlabel = L"Time step size $\Delta t$",
+                  ylabel = L"Relative $L^2$ error",
+                  title = "NLS equation")
+
+    linkyaxes!(ax_bbm, ax_kdv, ax_nls)
+    hideydecorations!(ax_kdv; grid = false)
+    hideydecorations!(ax_nls; grid = false)
+
+    @info "BBM equation"
+    let ax = ax_bbm
+        initial_condition = negative_solitary_wave
+        equation = BBM()
+        N = 400
+        tspan = (0.0, 10.0)
+        dts = (tspan[end] - tspan[begin]) ./ 2.0 .^ range(8.5, 13, length = 9)
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        D = fourier_derivative_operator(xmin, xmax, N)
+        (; q0, parameters) = setup(initial_condition, equation,
+                                    FourierGalerkin(), tspan, D)
+
+        plot_series = Vector{Any}()
+        for (label, relaxation) in [("baseline",
+                                     NoProjection()),
+                                   (L"$\mathcal{M}, \mathcal{P}, \mathcal{E}$ relaxation",
+                                    ProjectionEnergyRelaxation())]
+            @show relaxation
+            empty!(errors)
+
+            for dt in dts
+                @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                    rhs_nonstiff!,
+                                    q0, tspan, parameters, alg;
+                                    dt, relaxation)
+
+                # Compute relative L^2 error at the final time
+                p_D_small = parameters.D_small
+                p_tmp1_small = parameters.tmp1_small
+
+                x = grid(p_D_small)
+                t = sol.t[end]
+                p_D_small.tmp .= sol.u[end] ./ size(p_D_small, 2)
+                mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+                @. p_tmp1_small = (p_tmp1_small - initial_condition(t, x, equation))^2
+                err = sqrt(integrate(p_tmp1_small, p_D_small))
+                @. p_tmp1_small = initial_condition(t, x, equation)^2
+                rel = sqrt(integrate(p_tmp1_small, p_D_small))
+                push!(errors, err / rel)
+            end
+
+            scatter_plot = scatter!(ax, dts, errors; label = label)
+
+            idx = 1:length(dts)
+            c, p = fit_power(dts[idx], errors[idx])
+            @info "Convergence fit c Δt^p" c p
+            line_plot = lines!(ax, dts[idx], c .* dts[idx].^p;
+                               label = L"fit $c \Delta t^p$, $p \approx %$(round(p, digits=2))$")
+            push!(plot_series, [scatter_plot, line_plot])
+        end
+
+        axislegend(ax, plot_series[1],
+                   [p.label[] for p in plot_series[1]];
+                   position = :lt, framevisible = false, nbanks = 1)
+        axislegend(ax, plot_series[2],
+                   [p.label[] for p in plot_series[2]];
+                   position = :rb, framevisible = false, nbanks = 1)
+    end
+
+    @info "KdV equation"
+    let ax = ax_kdv
+        initial_condition = two_solitons
+        equation = KdV()
+        N = 1100
+        tspan = (0.0, 100.0)
+        dts = (tspan[end] - tspan[begin]) ./ 2.0 .^ range(9, 14, length = 9)
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        D = fourier_derivative_operator(xmin, xmax, N)
+        (; q0, parameters) = setup(initial_condition, equation,
+                                    FourierGalerkin(), tspan, D)
+
+        plot_series = Vector{Any}()
+        for (label, relaxation) in [("baseline",
+                                     NoProjection()),
+                                   (L"$\mathcal{M}, \mathcal{P}, \mathcal{E}$ relaxation",
+                                    ProjectionEnergyRelaxation())]
+            @show relaxation
+            empty!(errors)
+
+            for dt in dts
+                @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                    rhs_nonstiff!,
+                                    q0, tspan, parameters, alg;
+                                    dt, relaxation)
+
+                # Compute relative L^2 error at the final time
+                p_D_small = parameters.D_small
+                p_tmp1_small = parameters.tmp1_small
+
+                x = grid(p_D_small)
+                t = sol.t[end]
+                p_D_small.tmp .= sol.u[end] ./ size(p_D_small, 2)
+                mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+                @. p_tmp1_small = (p_tmp1_small - initial_condition(t, x, equation))^2
+                err = sqrt(integrate(p_tmp1_small, p_D_small))
+                @. p_tmp1_small = initial_condition(t, x, equation)^2
+                rel = sqrt(integrate(p_tmp1_small, p_D_small))
+                push!(errors, err / rel)
+            end
+
+            scatter_plot = scatter!(ax, dts, errors; label = label)
+
+            idx = 1:length(dts)
+            c, p = fit_power(dts[idx], errors[idx])
+            @info "Convergence fit c Δt^p" c p
+            line_plot = lines!(ax, dts[idx], c .* dts[idx].^p;
+                               label = L"fit $c \Delta t^p$, $p \approx %$(round(p, digits=2))$")
+            push!(plot_series, [scatter_plot, line_plot])
+        end
+
+        axislegend(ax, plot_series[1],
+                   [p.label[] for p in plot_series[1]];
+                   position = :lt, framevisible = false, nbanks = 1)
+        axislegend(ax, plot_series[2],
+                   [p.label[] for p in plot_series[2]];
+                   position = :rb, framevisible = false, nbanks = 1)
+    end
+
+    @info "NLS equation"
+    let ax = ax_nls
+        initial_condition = two_solitons
+        equation = CubicNLS(get_β(initial_condition))
+        N = 1200
+        tspan = (0.0, 1.0)
+        dts = (tspan[end] - tspan[begin]) ./ 2.0 .^ range(7, 12, length = 9)
+        alg = KenCarpARK548()
+
+        errors = Vector{Float64}()
+        (; xmin, xmax) = domain(initial_condition, equation)
+
+        D = fourier_derivative_operator(xmin, xmax, N)
+        (; q0, parameters) = setup(initial_condition, equation,
+                                    FourierGalerkin(), tspan, D)
+
+        plot_series = Vector{Any}()
+        for (label, relaxation) in [("baseline",
+                                     NoProjection()),
+                                   (L"$\mathcal{M}, \mathcal{P}, \mathcal{E}$ relaxation",
+                                    ProjectionEnergyRelaxation())]
+            @show relaxation
+            empty!(errors)
+
+            for dt in dts
+                @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                                    rhs_nonstiff!,
+                                    q0, tspan, parameters, alg;
+                                    dt, relaxation)
+
+                # Compute relative L^2 error at the final time
+                p_D_small = parameters.D_small
+                p_tmp1_small = parameters.tmp1_small
+                p_tmp2_small = parameters.tmp2_small
+
+                x = grid(p_D_small)
+                t = sol.t[end]
+                v = real(sol.u[end], equation)
+                w = imag(sol.u[end], equation)
+                p_D_small.tmp .= v ./ size(p_D_small, 2)
+                mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+                p_D_small.tmp .= w ./ size(p_D_small, 2)
+                mul!(p_tmp2_small, p_D_small.brfft_plan, p_D_small.tmp)
+                for i in eachindex(x, p_tmp1_small, p_tmp2_small)
+                    ic = initial_condition(t, x[i], equation)
+                    p_tmp1_small[i] = (p_tmp1_small[i] - real(ic))^2 + (p_tmp2_small[i] - imag(ic))^2
+                end
+                err = sqrt(integrate(p_tmp1_small, p_D_small))
+                @. p_tmp1_small = abs2(initial_condition(t, x, equation))
+                rel = sqrt(integrate(p_tmp1_small, p_D_small))
+                push!(errors, err / rel)
+            end
+
+            scatter_plot = scatter!(ax, dts, errors; label = label)
+
+            idx = 1:length(dts)
+            c, p = fit_power(dts[idx], errors[idx])
+            @info "Convergence fit c Δt^p" c p
+            line_plot = lines!(ax, dts[idx], c .* dts[idx].^p;
+                               label = L"fit $c \Delta t^p$, $p \approx %$(round(p, digits=2))$")
+            push!(plot_series, [scatter_plot, line_plot])
+        end
+
+        axislegend(ax, plot_series[1],
+                   [p.label[] for p in plot_series[1]];
+                   position = :lt, framevisible = false, nbanks = 1)
+        axislegend(ax, plot_series[2],
+                   [p.label[] for p in plot_series[2]];
+                   position = :rb, framevisible = false, nbanks = 1)
+    end
+
+    filename = joinpath(FIGDIR, "convergence_in_time.pdf")
     save(filename, fig)
     @info "Results saved to $filename"
     return nothing

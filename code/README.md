@@ -12,9 +12,13 @@ julia> include("code.jl")
 
 julia> semidiscrete_conservation() # takes a few seconds
 
+julia> convergence_in_space() # takes a few seconds
+
 julia> fully_discrete_conservation_two_waves() # takes a few seconds
 
 julia> fully_discrete_conservation_one_wave() # takes a few seconds
+
+julia> convergence_in_time() # takes a few seconds
 
 julia> error_growth_multiple_solitons() # takes a few minutes
 

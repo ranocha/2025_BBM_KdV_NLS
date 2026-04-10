@@ -30,6 +30,8 @@ julia> error_growth_gray_solitons() # takes roughly a minute
 
 julia> change_of_invariants_gray_solitons() # takes roughly a minute
 
+julia> comparison_gauss_methods() # takes minutes
+
 julia> hyperbolized_nls() # takes roughly a minute
 
 ```
@@ -86,6 +88,46 @@ by adding this line to the script `NLS_Collo_1d.py` at line 88:
 
 ```python
 print(myObj.endt_L2_ex_err_set[-1].real)
+```
+
+## Error Growth Comparison with Bai et. al. (2024)
+
+For the error growth comparison with the work of
+[Bai et. al. (2024)](https://doi.org/10.1137/22M152178X), to
+perform the simulation with our code:
+
+```julia
+julia> include("code.jl") # if you have not done so already
+
+julia> comparison_bai_et_al_error_growth_data()
+ 30.053355 seconds (65.71 k allocations: 8.734 MiB, 0.09% compilation time)
+```
+
+This will save the error growth data to a text file in the `figures` directory in this repository.
+
+Next, Bai's code must be modified to use periodic boundary conditions
+in both the simulation and the exact solution, since for this
+long simulation the solution will transit the domain many times.
+These changes are contained in `bai_periodic.patch`, which you should
+apply to their code.
+
+Then launch Python (or IPython) and enter the following commands:
+
+```python
+import NLS_Collo_1d
+NLS_Collo_1d.Main(1,40,1024,100000,1000,2,3,"Err","Standard_Soliton",20,"test",True)
+```
+
+This simulation may take several hours.
+The time values and corresponding L2 errors will be printed to the screen at the end of the simulation.
+Copy them and save them to the file `comparison_bai_et_al_error_growth__their_data.txt` in the `figures` directory of this repository.
+
+Afterward, you can generate the corresponding plot as follows:
+
+```julia
+julia> include("code.jl") # if you have not done so already
+
+julia> comparison_bai_et_al_error_growth_plot()
 ```
 
 

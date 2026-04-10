@@ -1,0 +1,550 @@
+diff -ruN Downloads/ME-Conserved-NLS-main/.gitignore ME-conserved-NLS/.gitignore
+--- Downloads/ME-Conserved-NLS-main/.gitignore	2023-09-20 14:18:50
++++ ME-conserved-NLS/.gitignore	1970-01-01 03:00:00
+@@ -1,3 +0,0 @@
+-.DS_Store
+-__pycache__/
+-.vscode
+\ No newline at end of file
+diff -ruN Downloads/ME-Conserved-NLS-main/Numerical_Tests/1d_Standard_Soliton/NLS_Collo_1d_ME_Conser.py ME-conserved-NLS/Numerical_Tests/1d_Standard_Soliton/NLS_Collo_1d_ME_Conser.py
+--- Downloads/ME-Conserved-NLS-main/Numerical_Tests/1d_Standard_Soliton/NLS_Collo_1d_ME_Conser.py	2023-09-20 14:18:50
++++ ME-conserved-NLS/Numerical_Tests/1d_Standard_Soliton/NLS_Collo_1d_ME_Conser.py	2026-04-08 08:08:35
+@@ -65,4 +65,4 @@
+             "endt_N_iter":myObj.endt_Newton_it,
+             "endt_Param_iter":myObj.endt_alpbet_it
+         }
+-        np.save(os.path.join(BaseDirPath,res_name),Res_dict,allow_pickle=True)
+\ No newline at end of file
++        np.save(os.path.join(BaseDirPath,res_name),Res_dict,allow_pickle=True)
+diff -ruN Downloads/ME-Conserved-NLS-main/Numerical_Tests/NLS_Collo_1d.py ME-conserved-NLS/Numerical_Tests/NLS_Collo_1d.py
+--- Downloads/ME-Conserved-NLS-main/Numerical_Tests/NLS_Collo_1d.py	2023-09-20 14:18:50
++++ ME-conserved-NLS/Numerical_Tests/NLS_Collo_1d.py	2026-04-09 11:49:09
+@@ -24,7 +24,7 @@
+         PPC: true for using post-processing correction
+     '''
+ 
+-    Lap_opt = 'Dirichlet'
++    Lap_opt = 'peri'
+     lp, rp = -L, L
+     N_thres = 1e-10
+     ref_order = 1
+@@ -44,6 +44,7 @@
+     BaseDirPath = './{}d_{}/{}/{}_{}'.format(dim,Sol_Type,Test_Name,prefix,suffix)
+     if not os.path.exists(BaseDirPath):
+         os.makedirs(BaseDirPath)
++    print(BaseDirPath)
+ 
+     if Output in ["Err", "All"]:
+         res_name = 'dt_{}_h_{}.npy'.format(N_T,N_S)
+@@ -55,7 +56,7 @@
+     
+     Res_dict = {}
+     # Generate 1d Mesh
+-    Mesh_Obj = Mesh1d(lp,rp,N_S,periodic=False)
++    Mesh_Obj = Mesh1d(lp,rp,N_S,periodic=True)
+     mesh     = Mesh(Mesh_Obj.ngmesh)
+     myObj    = CPN_Converg_1d_Focus_Newt(
+         mesh, kappa = 2, p = 3,
+@@ -84,6 +85,9 @@
+         "endt_exactu_H1":myObj.endt_exactu_H1,
+         "int_exactu_H1":myObj.int_exactu_H1,
+     }
++    #print(myObj.endt_L2_ex_err_set[-1].real)
++    for i, xx in enumerate(myObj.endt_L2_ex_err_set):
++        print(i/100, xx.real)
+ 
+     if Output in ["Err", "All"]:
+         np.save(os.path.join(BaseDirPath,res_name),Res_dict,allow_pickle=True)
+diff -ruN Downloads/ME-Conserved-NLS-main/Numerical_Tests/experiments.sh ME-conserved-NLS/Numerical_Tests/experiments.sh
+--- Downloads/ME-Conserved-NLS-main/Numerical_Tests/experiments.sh	2023-09-20 14:18:50
++++ ME-conserved-NLS/Numerical_Tests/experiments.sh	2026-04-08 08:08:36
+@@ -2,43 +2,43 @@
+ 
+ ## Running experiments for testing spatial convergence of FEM degree 1,2,3
+ ## And generate .npy files collecting H1 errs 
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o1.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o2.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o3.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o1.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o2.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Spat_Conv/Spat_Conv_o3.json
+ 
+ ## Read all .npy files according to the parameters .json files and collect the infH1 error into a Sum.. file
+-python Data_Analyse_H1err.py 1d_Standard_Soliton/Spat_Conv
++python3 Data_Analyse_H1err.py 1d_Standard_Soliton/Spat_Conv
+ 
+ ## Running experiments for testing temporal convergence of collocation degree 2,3,4
+ ## And generate .npy files collecting H1 errs 
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o2.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o3.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o4.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o2.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o3.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/Temp_Conv/Temp_Conv_o4.json
+ 
+ ## Read all .npy files according to the parameters .json files and collect the infH1 error into a Sum.. file
+-python Data_Analyse_H1err.py 1d_Standard_Soliton/Temp_Conv
++python3 Data_Analyse_H1err.py 1d_Standard_Soliton/Temp_Conv
+ 
+ ## running 1d standard soliton ME_Conservation test, CPU test and compare with the standard Gauss collocation method
+-python NLS_Collo_1d.py 1d_Standard_Soliton/ME_Conserv/ME_Conserv.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/En-Mass_Cp/En-Mass_PPC.json
+-python NLS_Collo_1d.py 1d_Standard_Soliton/En-Mass_Cp/En-Mass_GL.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/ME_Conserv/ME_Conserv.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/En-Mass_Cp/En-Mass_PPC.json
++python3 NLS_Collo_1d.py 1d_Standard_Soliton/En-Mass_Cp/En-Mass_GL.json
+ 
+ ## running 1d bi soliton tests: long time, comparison
+-python NLS_Collo_1d.py 1d_Bi_Soliton/LongTSol.json
+-python NLS_Collo_1d.py 1d_Bi_Soliton/ShortTSol.json
++python3 NLS_Collo_1d.py 1d_Bi_Soliton/LongTSol.json
++python3 NLS_Collo_1d.py 1d_Bi_Soliton/ShortTSol.json
+ 
+ ## running 2d soliton spatial convergence test
+-python NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o1.json
+-python NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o2.json
+-python NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o3.json
+-python Data_Analyse_H1err.py 2d_Soliton/Spat_Conv
++python3 NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o1.json
++python3 NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o2.json
++python3 NLS_Collo_2d.py 2d_Soliton/Spat_Conv/Spat_Conv_o3.json
++python3 Data_Analyse_H1err.py 2d_Soliton/Spat_Conv
+ 
+ ## running 2d soliton temporal convergence test
+-python NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o2.json
+-python NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o3.json
+-python NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o4.json
+-python Data_Analyse_H1err.py 2d_Soliton/Temp_Conv
++python3 NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o2.json
++python3 NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o3.json
++python3 NLS_Collo_2d.py 2d_Soliton/Temp_Conv/Temp_Conv_o4.json
++python3 Data_Analyse_H1err.py 2d_Soliton/Temp_Conv
+ 
+ ## running 2d soliton ME_Conservation test
+-python NLS_Collo_2d.py 2d_Soliton/ME_Conserv/ME_Conserv.json
++python3 NLS_Collo_2d.py 2d_Soliton/ME_Conserv/ME_Conserv.json
+ 
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Collocation/BaseMethod.py ME-conserved-NLS/Packages/Collocation/BaseMethod.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Collocation/BaseMethod.py	2023-09-20 14:18:50
++++ ME-conserved-NLS/Packages/Collocation/BaseMethod.py	2026-04-08 08:08:36
+@@ -443,7 +443,10 @@
+         # Initialize ref sol and numer sol on high order interpolation spaces.
+         self.exactu_Proj_ref = GridFunction(self.fesc_working_ref)
+         self.u_num_Proj_res = GridFunction(self.fesc_working_ref)
+-        self.tParam = Parameter(0)
++
++        # store exact solution as a Python callable of scalar time
++        self.exact_u = exact_u
++
+         # Collect err at end points
+         self.endt_mas_c_set = []
+         self.endt_eng_c_set = []
+@@ -451,6 +454,7 @@
+         self.endt_L2_ex_err_set = []
+         self.endt_Newton_it = []
+         self.endt_alpbet_it = []
++
+         # Collect err at interior points
+         self.int_mas_c_set = []
+         self.int_eng_c_set = []
+@@ -459,18 +463,13 @@
+         self.int_tset = []
+         self.int_exactu_H1  = []
+         self.endt_exactu_H1 = []
+-        # Related to kappa and p
+-        self.exact_u_ng = exact_u(self.tParam)
+ 
+     def IniByProj(self):
+-        t0 = self.tParam.Get()
+-        assert t0 == 0
+-        self.un.Set(self.exact_u_ng)
++        self.un.Set(self.exact_u(0.0))
+ 
+     def PostProcess_T(self,t,u_num):
+-        self.tParam.Set(t)
+         # Error by numerical and projection on finer mesh
+-        self.exactu_Proj_ref.Set(self.exact_u_ng)
++        self.exactu_Proj_ref.Set(self.exact_u(t))
+         self.u_num_Proj_res.Set(u_num)
+         self.eu_ref.vec.data = self.u_num_Proj_res.vec - self.exactu_Proj_ref.vec
+         L2_err_instant = np.sqrt(self.L2Omeg(self.eu_ref))
+@@ -481,6 +480,48 @@
+         Eht = 1/2*self.H1semi(u_num) - 1/2*self.IntOmeg(self.F_norm2(Norm(u_num)))
+         return L2_err_instant, H1_err_instant, Mht, Eht, Exactu_H1_norm
+ 
++#    def Sol_Setting(self, exact_u:Callable):
++#        # Initialize ref sol and numer sol on high order interpolation spaces.
++#        self.exactu_Proj_ref = GridFunction(self.fesc_working_ref)
++#        self.u_num_Proj_res = GridFunction(self.fesc_working_ref)
++#        self.tParam = Parameter(0)
++#        # Collect err at end points
++#        self.endt_mas_c_set = []
++#        self.endt_eng_c_set = []
++#        self.endt_H1_ex_err_set = []
++#        self.endt_L2_ex_err_set = []
++#        self.endt_Newton_it = []
++#        self.endt_alpbet_it = []
++#        # Collect err at interior points
++#        self.int_mas_c_set = []
++#        self.int_eng_c_set = []
++#        self.int_H1_ex_err_set = []
++#        self.int_L2_ex_err_set = []
++#        self.int_tset = []
++#        self.int_exactu_H1  = []
++#        self.endt_exactu_H1 = []
++#        # Related to kappa and p
++#        self.exact_u_ng = exact_u(self.tParam)
++#
++#    def IniByProj(self):
++#        t0 = self.tParam.Get()
++#        assert t0 == 0
++#        self.un.Set(self.exact_u_ng)
++#
++#    def PostProcess_T(self,t,u_num):
++#        self.tParam.Set(t)
++#        # Error by numerical and projection on finer mesh
++#        self.exactu_Proj_ref.Set(self.exact_u_ng)
++#        self.u_num_Proj_res.Set(u_num)
++#        self.eu_ref.vec.data = self.u_num_Proj_res.vec - self.exactu_Proj_ref.vec
++#        L2_err_instant = np.sqrt(self.L2Omeg(self.eu_ref))
++#        H1_err_instant = np.sqrt(self.H1Omeg(self.eu_ref))
++#        Exactu_H1_norm = np.sqrt(self.H1Omeg(self.exactu_Proj_ref))
++#        # Energy Mass conservation
++#        Mht = 1/2*self.L2Omeg(u_num)
++#        Eht = 1/2*self.H1semi(u_num) - 1/2*self.IntOmeg(self.F_norm2(Norm(u_num)))
++#        return L2_err_instant, H1_err_instant, Mht, Eht, Exactu_H1_norm
++
+     def PP_Pic(self,init=False):
+         '''
+             Caution: self.t should be the end time 
+@@ -547,7 +588,10 @@
+         # Initialize ref sol and numer sol on high order interpolation spaces.
+         self.exactu_Proj_ref = GridFunction(self.fesc_working_ref)
+         self.u_num_Proj_res = GridFunction(self.fesc_working_ref)
+-        self.tParam = Parameter(0)
++
++        # store exact solution as a Python callable of time
++        self.exact_u = exact_u
++
+         # Collect err at end points
+         self.endt_mas_c_set = []
+         self.endt_eng_c_set = []
+@@ -555,6 +599,7 @@
+         self.endt_L2_ex_err_set = []
+         self.endt_Newton_it = []
+         self.endt_alpbet_it = []
++
+         # Collect err at interior points
+         self.int_mas_c_set = []
+         self.int_eng_c_set = []
+@@ -563,26 +608,63 @@
+         self.int_tset = []
+         self.int_exactu_H1  = []
+         self.endt_exactu_H1 = []
+-        self.exact_u_ng = exact_u(self.tParam)
+ 
+     def IniByProj(self):
+-        t0 = self.tParam.Get()
+-        assert t0 == 0
+-        self.un.Set(self.exact_u_ng)
++        self.un.Set(self.exact_u(0.0))
+ 
+     def PostProcess_T(self,t,u_num):
+-        self.tParam.Set(t)
+-        # Error by numerical and projection on finer mesh
+-        self.exactu_Proj_ref.Set(self.exact_u_ng)
++        # rebuild exact solution only for this scalar time
++        self.exactu_Proj_ref.Set(self.exact_u(t))
+         self.u_num_Proj_res.Set(u_num)
+         self.eu_ref.vec.data = self.u_num_Proj_res.vec - self.exactu_Proj_ref.vec
+         L2_err_instant = np.sqrt(self.L2Omeg(self.eu_ref))
+         H1_err_instant = np.sqrt(self.H1Omeg(self.eu_ref))
+         Exactu_H1_norm = np.sqrt(self.H1Omeg(self.exactu_Proj_ref))
+-        # Energy Mass conservation
+         Mht = 1/2*self.L2Omeg(u_num)
+         Eht = 1/2*self.H1semi(u_num) - 1/2*self.IntOmeg(self.F_norm2(Norm(u_num)))
+         return L2_err_instant, H1_err_instant, Mht, Eht, Exactu_H1_norm
++
++#    def Sol_Setting(self, exact_u:Callable):
++#        # Initialize ref sol and numer sol on high order interpolation spaces.
++#        self.exactu_Proj_ref = GridFunction(self.fesc_working_ref)
++#        self.u_num_Proj_res = GridFunction(self.fesc_working_ref)
++#        self.tParam = Parameter(0)
++#        # Collect err at end points
++#        self.endt_mas_c_set = []
++#        self.endt_eng_c_set = []
++#        self.endt_H1_ex_err_set = []
++#        self.endt_L2_ex_err_set = []
++#        self.endt_Newton_it = []
++#        self.endt_alpbet_it = []
++#        # Collect err at interior points
++#        self.int_mas_c_set = []
++#        self.int_eng_c_set = []
++#        self.int_H1_ex_err_set = []
++#        self.int_L2_ex_err_set = []
++#        self.int_tset = []
++#        self.int_exactu_H1  = []
++#        self.endt_exactu_H1 = []
++#        self.exact_u_ng = exact_u(self.tParam).Compile()
++#        #self.exact_u_ng = exact_u(self.tParam)
++#
++#    def IniByProj(self):
++#        t0 = self.tParam.Get()
++#        assert t0 == 0
++#        self.un.Set(self.exact_u_ng)
++#
++#    def PostProcess_T(self,t,u_num):
++#        self.tParam.Set(t)
++#        # Error by numerical and projection on finer mesh
++#        self.exactu_Proj_ref.Set(self.exact_u_ng)
++#        self.u_num_Proj_res.Set(u_num)
++#        self.eu_ref.vec.data = self.u_num_Proj_res.vec - self.exactu_Proj_ref.vec
++#        L2_err_instant = np.sqrt(self.L2Omeg(self.eu_ref))
++#        H1_err_instant = np.sqrt(self.H1Omeg(self.eu_ref))
++#        Exactu_H1_norm = np.sqrt(self.H1Omeg(self.exactu_Proj_ref))
++#        # Energy Mass conservation
++#        Mht = 1/2*self.L2Omeg(u_num)
++#        Eht = 1/2*self.H1semi(u_num) - 1/2*self.IntOmeg(self.F_norm2(Norm(u_num)))
++#        return L2_err_instant, H1_err_instant, Mht, Eht, Exactu_H1_norm
+ 
+     def PP_Pic(self,init=False):
+         if init:
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.halfway.py ME-conserved-NLS/Packages/Exact_Sol.halfway.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.halfway.py	1970-01-01 03:00:00
++++ ME-conserved-NLS/Packages/Exact_Sol.halfway.py	2026-04-08 08:08:36
+@@ -0,0 +1,41 @@
++from ngsolve import *
++import numpy as np
++
++sech = lambda x_: 1/cosh(x_)
++tanh = lambda x_: sinh(x_)/cosh(x_)
++
++sol_M = 1.2
++sol_N = 1
++J = np.arctanh(2*sol_M*sol_N/(sol_M**2+sol_N**2))
++
++c = -4.0
++L = 40.0
++P = 2*L
++
++def std_soliton(z, t):
++    return exp(1j*(-2*z + 5*t)) * sech(z)
++
++def std_soliton_periodic_approx(t, M=1):
++    return sum(std_soliton(x + m*P - c*t, t) for m in range(-M, M+1))
++
++chx = (exp(x)+exp(-x))/2
++Exact_u_Dict = {
++    'Order2_Soliton': lambda t: (4+3*(exp(8*1j*t)-1)/chx**2)/(
++            2*chx+3/4*(cos(8*t)-1)/chx**3
++        )*exp(1j*t),
++
++    # use M=1 first; if you want extra safety, change to M=2
++    'Standard_Soliton': lambda t: std_soliton_periodic_approx(t, M=2),
++
++    'Bi_Soliton_T_Inv': lambda t: (
++            exp(-1j*sol_M**2*(2-t))*sol_M*sech(sol_M*x) - exp(-1j*sol_N**2*(2-t))*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*(2-t))*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Bi_Soliton': lambda t: (
++            exp(1j*sol_M**2*t)*sol_M*sech(sol_M*x) - exp(1j*sol_N**2*t)*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*t)*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Soliton': lambda t: 4/(2*exp(x+y-2*np.sqrt(2)*t)+exp(-(x+y-2*np.sqrt(2)*t)))*exp(1j*(t+(x+y)*np.sqrt(2)/2))
++}
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.mod1.py ME-conserved-NLS/Packages/Exact_Sol.mod1.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.mod1.py	1970-01-01 03:00:00
++++ ME-conserved-NLS/Packages/Exact_Sol.mod1.py	2026-04-08 08:08:36
+@@ -0,0 +1,49 @@
++from ngsolve import *
++import numpy as np
++
++sech = lambda z: 1/cosh(z)
++tanh = lambda z: sinh(z)/cosh(z)
++
++sol_M = 1.2
++sol_N = 1
++J = np.arctanh(2*sol_M*sol_N/(sol_M**2+sol_N**2))
++
++L = 40.0
++xmin = -L
++xmax =  L
++period = xmax - xmin
++
++c = -4.0
++
++def wrap_periodic_1d(z):
++    # map z back into [xmin, xmax], assuming at most one crossing
++    return IfPos(z - xmax,
++                 z - period,
++                 IfPos(xmin - z,
++                       z + period,
++                       z))
++
++chx = (exp(x)+exp(-x))/2
++
++Exact_u_Dict = {
++    'Order2_Soliton': lambda t: (4+3*(exp(8*1j*t)-1)/chx**2)/(
++            2*chx+3/4*(cos(8*t)-1)/chx**3
++        )*exp(1j*t),
++
++    'Standard_Soliton': lambda t: (
++        exp(1j*(-2*wrap_periodic_1d(x - c*t) + 5*t))
++        * sech(wrap_periodic_1d(x - c*t))
++    ),
++
++    'Bi_Soliton_T_Inv': lambda t: (
++            exp(-1j*sol_M**2*(2-t))*sol_M*sech(sol_M*x) - exp(-1j*sol_N**2*(2-t))*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*(2-t))*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Bi_Soliton': lambda t: (
++            exp(1j*sol_M**2*t)*sol_M*sech(sol_M*x) - exp(1j*sol_N**2*t)*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*t)*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Soliton': lambda t: 4/(2*exp(x+y-2*np.sqrt(2)*t)+exp(-(x+y-2*np.sqrt(2)*t)))*exp(1j*(t+(x+y)*np.sqrt(2)/2))
++}
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.orig.py ME-conserved-NLS/Packages/Exact_Sol.orig.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.orig.py	1970-01-01 03:00:00
++++ ME-conserved-NLS/Packages/Exact_Sol.orig.py	2026-04-08 08:08:36
+@@ -0,0 +1,25 @@
++from ngsolve import *
++import numpy as np
++
++sech = lambda x_: 1/cosh(x_)
++tanh = lambda x_: sinh(x_)/cosh(x_)
++sol_M = 1.2
++sol_N = 1
++J = np.arctanh(2*sol_M*sol_N/(sol_M**2+sol_N**2))
++
++chx = (exp(x)+exp(-x))/2
++Exact_u_Dict = {
++    'Order2_Soliton': lambda t: (4+3*(exp(8*1j*t)-1)/chx**2)/(
++            2*chx+3/4*(cos(8*t)-1)/chx**3
++        )*exp(1j*t),
++    'Standard_Soliton': lambda t: 2/(exp(x+4*t)+exp(-x-4*t))*exp(-1j*(2*x+3*t)),
++    'Bi_Soliton_T_Inv': lambda t: (
++            exp(-1j*sol_M**2*(2-t))*sol_M*sech(sol_M*x) - exp(-1j*sol_N**2*(2-t))*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*(2-t))*sech(sol_M*x)*sech(sol_N*x))
++        ),
++    'Bi_Soliton': lambda t: (
++            exp(1j*sol_M**2*t)*sol_M*sech(sol_M*x) - exp(1j*sol_N**2*t)*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*t)*sech(sol_M*x)*sech(sol_N*x))
++        ),
++    'Soliton': lambda t: 4/(2*exp(x+y-2*np.sqrt(2)*t)+exp(-(x+y-2*np.sqrt(2)*t)))*exp(1j*(t+(x+y)*np.sqrt(2)/2))
++}
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.py ME-conserved-NLS/Packages/Exact_Sol.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.py	2023-09-20 14:18:50
++++ ME-conserved-NLS/Packages/Exact_Sol.py	2026-04-08 08:08:36
+@@ -3,23 +3,44 @@
+ 
+ sech = lambda x_: 1/cosh(x_)
+ tanh = lambda x_: sinh(x_)/cosh(x_)
++
+ sol_M = 1.2
+ sol_N = 1
+ J = np.arctanh(2*sol_M*sol_N/(sol_M**2+sol_N**2))
+-
+ chx = (exp(x)+exp(-x))/2
++
++c = -4.0
++L = 40.0
++P = 2*L
++
++def standard_soliton_periodic_local3(t):
++    t = float(t)
++
++    # choose the image whose center c*t - m*P lies in [-L, L)
++    m = int(np.floor((c*t + L)/P))
++
++    out = 0
++    for j in (m-1, m, m+1):
++        z = x + j*P - c*t
++        out += exp(1j*(-2*z + 5*t)) * sech(z)
++    return out
++
+ Exact_u_Dict = {
++    'Standard_Soliton': standard_soliton_periodic_local3,
++
+     'Order2_Soliton': lambda t: (4+3*(exp(8*1j*t)-1)/chx**2)/(
+             2*chx+3/4*(cos(8*t)-1)/chx**3
+         )*exp(1j*t),
+-    'Standard_Soliton': lambda t: 2/(exp(x+4*t)+exp(-x-4*t))*exp(-1j*(2*x+3*t)),
++
+     'Bi_Soliton_T_Inv': lambda t: (
+             exp(-1j*sol_M**2*(2-t))*sol_M*sech(sol_M*x) - exp(-1j*sol_N**2*(2-t))*sol_N*sech(sol_N*x))/(
+             np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*(2-t))*sech(sol_M*x)*sech(sol_N*x))
+         ),
++
+     'Bi_Soliton': lambda t: (
+             exp(1j*sol_M**2*t)*sol_M*sech(sol_M*x) - exp(1j*sol_N**2*t)*sol_N*sech(sol_N*x))/(
+             np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*t)*sech(sol_M*x)*sech(sol_N*x))
+         ),
++
+     'Soliton': lambda t: 4/(2*exp(x+y-2*np.sqrt(2)*t)+exp(-(x+y-2*np.sqrt(2)*t)))*exp(1j*(t+(x+y)*np.sqrt(2)/2))
+-}
+\ No newline at end of file
++}
+diff -ruN Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.tooslow.py ME-conserved-NLS/Packages/Exact_Sol.tooslow.py
+--- Downloads/ME-Conserved-NLS-main/Packages/Exact_Sol.tooslow.py	1970-01-01 03:00:00
++++ ME-conserved-NLS/Packages/Exact_Sol.tooslow.py	2026-04-08 08:08:36
+@@ -0,0 +1,56 @@
++from ngsolve import *
++import numpy as np
++
++sech = lambda x_: 1/cosh(x_)
++tanh = lambda x_: sinh(x_)/cosh(x_)
++
++sol_M = 1.2
++sol_N = 1
++J = np.arctanh(2*sol_M*sol_N/(sol_M**2+sol_N**2))
++
++c = -4.0
++L = 40.0
++xmax = L
++xmin = -L
++period = xmax - xmin
++
++def wrap_periodic_1d(z, max_wraps=60):
++    """
++    Wrap z back into [xmin, xmax] by repeatedly shifting by one period.
++    max_wraps just needs to be large enough for the largest time of interest.
++    For T <= 1000 here, 60 is plenty.
++    """
++    zz = z
++    for _ in range(max_wraps):
++        zz = IfPos(zz - xmax, zz - period, zz)
++        zz = IfPos(xmin - zz, zz + period, zz)
++    return zz
++
++chx = (exp(x)+exp(-x))/2
++
++Exact_u_Dict = {
++    'Order2_Soliton': lambda t: (4+3*(exp(8*1j*t)-1)/chx**2)/(
++            2*chx+3/4*(cos(8*t)-1)/chx**3
++        )*exp(1j*t),
++
++#    'Standard_Soliton': lambda t: (
++#    lambda xt: exp(1j*(-2*xt + 5*t)) * sech(xt)
++#        )(wrap_periodic_1d(x - c*t))
++
++    'Standard_Soliton': lambda t: (
++        exp(1j*(-2*wrap_periodic_1d(x - c*t) + 5*t))
++        * sech(wrap_periodic_1d(x - c*t))
++    ),
++
++    'Bi_Soliton_T_Inv': lambda t: (
++            exp(-1j*sol_M**2*(2-t))*sol_M*sech(sol_M*x) - exp(-1j*sol_N**2*(2-t))*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*(2-t))*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Bi_Soliton': lambda t: (
++            exp(1j*sol_M**2*t)*sol_M*sech(sol_M*x) - exp(1j*sol_N**2*t)*sol_N*sech(sol_N*x))/(
++            np.cosh(J) - np.sinh(J)*(tanh(sol_M*x)*tanh(sol_N*x) + cos((sol_M**2-sol_N**2)*t)*sech(sol_M*x)*sech(sol_N*x))
++        ),
++
++    'Soliton': lambda t: 4/(2*exp(x+y-2*np.sqrt(2)*t)+exp(-(x+y-2*np.sqrt(2)*t)))*exp(1j*(t+(x+y)*np.sqrt(2)/2))
++}

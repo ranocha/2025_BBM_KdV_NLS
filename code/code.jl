@@ -7,6 +7,7 @@ Pkg.instantiate()
 using LinearAlgebra: LinearAlgebra, Diagonal, UniformScaling, I, det, diag, diagind, mul!, ldiv!, lu, lu!, norm
 using SparseArrays: SparseArrays, sparse, issparse, dropzeros!
 using Printf: @sprintf
+using DelimitedFiles: readdlm, writedlm
 
 using StaticArrays: StaticArrays, @SMatrix, SVector
 
@@ -17,6 +18,23 @@ using SummationByPartsOperators: xmin, xmax
 
 using TowerOfEnzyme: nth_derivative # for AD to compute N-solitons of KdV nicely
 using JacobiElliptic: JacobiElliptic
+
+# GeometricIntegrators.jl loads FastTransforms.jl
+# However, on some systems, the default threading
+# enabled by FastTransforms.jl in
+# https://github.com/JuliaApproximation/FastTransforms.jl/blob/14a311816ffb58131ee09d7d6bf3cc50793dfc6a/src/libfasttransforms.jl#L15-L20
+# can cause a significant performance penalty of roughly
+# 100x for FFTs. Thus, we disable the settings made in
+# FastTransforms.__init__() and set their number of threads to 1.
+# Since this uses internal API of their package, it may only work
+# when using the Manifest.toml provided in this repository, which
+# we assume either way for perfect reproducibility of the results.
+import FastTransforms
+FastTransforms.ft_set_num_threads(1)
+ccall((:ft_fftw_init_threads, FastTransforms.libfasttransforms), Cint, ())
+FastTransforms.ft_fftw_plan_with_nthreads(1)
+import GeometricIntegrators
+import GeometricIntegratorsBase
 
 using LaTeXStrings
 using CairoMakie
@@ -4232,6 +4250,186 @@ function change_of_invariants_gray_solitons()
     return nothing
 end
 
+function geometric_integrators_rhs!(du_real, t, u_real, parameters)
+    # GeometricIntegrators.jl cannot handle complex numbers
+    (; du_tmp, du, u) = parameters
+    length(u_real) == 2 * length(u) ||
+        throw(DimensionMismatch("Expected a real-valued state with length $(2 * length(u)), got $(length(u_real))."))
+    eltype(u_real) === Float64 ||
+        throw(ArgumentError("`geometric_integrators_rhs!` expects `Float64` state vectors. Construct the Gauss integrator with a finite-difference Jacobian so ForwardDiff dual numbers are not passed here."))
+    eltype(du_real) === Float64 ||
+        throw(ArgumentError("`geometric_integrators_rhs!` expects `Float64` output vectors. Construct the Gauss integrator with a finite-difference Jacobian so ForwardDiff dual numbers are not passed here."))
+
+    copyto!(u, reinterpret(ComplexF64, u_real))
+    rhs_stiff!(du_tmp, u, parameters, t)
+    rhs_nonstiff!(du, u, parameters, t)
+    @. du = du + du_tmp
+    copyto!(du_real, reinterpret(Float64, du))
+    return nothing
+end
+function comparison_gauss_methods()
+    fig = Figure(size = (1200, 400)) # default size is (600, 450)
+
+    ax_error = Axis(fig[1, 1];
+                    xlabel = L"Time $t$",
+                    ylabel = L"Error at time $t$",
+                    xscale = log10, yscale = log10)
+    ax_runtime = Axis(fig[1, 2];
+                      xlabel = L"Time $t$",
+                      ylabel = L"Runtime up to time $t$ [s]",
+                      xscale = log10, yscale = log10)
+
+    equation = KdV()
+    initial_condition = one_soliton
+    N = 2^7
+    dt = 0.1
+    alg = KenCarpARK548()
+    dt_gauss = 0.25
+    tspan = (0.0, 180.0)
+
+    (; xmin, xmax) = domain(initial_condition, equation)
+    D = fourier_derivative_operator(xmin, xmax, N)
+
+    (; q0, parameters) = setup(initial_condition, equation,
+                                FourierGalerkin(), tspan, D)
+
+    # Setup callback computing the error
+    series_t = Vector{Float64}()
+    series_error = Vector{Float64}()
+    series_runtime = Vector{Float64}()
+    time_initial = Ref(time())
+    callback = let series_t = series_t, series_error = series_error, series_runtime = series_runtime, time_initial = time_initial, initial_condition = initial_condition
+        function (q, parameters, t)
+            p_equation = parameters.equation
+            p_D_small = parameters.D_small
+            p_tmp1_small = parameters.tmp1_small
+
+            push!(series_t, t)
+
+            push!(series_runtime, time() - time_initial[])
+
+            x = grid(p_D_small)
+            p_D_small.tmp .= q ./ size(p_D_small, 2)
+            mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+            @. p_tmp1_small = (p_tmp1_small - initial_condition(t, x, p_equation))^2
+            push!(series_error, sqrt(integrate(p_tmp1_small, p_D_small)))
+
+            return nothing
+        end
+    end
+
+    ######################################################################
+    # IMEX method without relaxation
+
+    label = "baseline"
+    relaxation = NoProjection()
+    @info "Running baseline IMEX method without relaxation" dt
+
+    # Run once to compile the code
+    solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+               rhs_nonstiff!,
+               q0, (0.0, 2 * dt), parameters, alg;
+               dt, callback,
+               relaxation, relaxation_tol = 1.0e-15)
+
+    empty!(series_t)
+    empty!(series_error)
+    empty!(series_runtime)
+    sleep(1)
+    time_initial[] = time()
+    @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                           rhs_nonstiff!,
+                           q0, tspan, parameters, alg;
+                           dt, callback,
+                           relaxation, relaxation_tol = 1.0e-15)
+
+    lines!(ax_error, series_t, series_error; label)
+    lines!(ax_runtime, series_t, series_runtime; label)
+
+    ######################################################################
+    # IMEX method with relaxation
+
+    label = L"$\mathcal{M}, \mathcal{E}$ relaxation"
+    relaxation = MassEnergyRelaxation()
+    @info "Running IMEX method with mass-energy relaxation" dt
+
+    # Run once to compile the code
+    solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+               rhs_nonstiff!,
+               q0, (0.0, 2 * dt), parameters, alg;
+               dt, callback,
+               relaxation, relaxation_tol = 1.0e-15)
+
+    empty!(series_t)
+    empty!(series_error)
+    empty!(series_runtime)
+    sleep(1)
+    time_initial[] = time()
+    @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                           rhs_nonstiff!,
+                           q0, tspan, parameters, alg;
+                           dt, callback,
+                           relaxation, relaxation_tol = 1.0e-15)
+
+    lines!(ax_error, series_t, series_error; label)
+    lines!(ax_runtime, series_t, series_runtime; label)
+
+    ######################################################################
+    # Gauss method
+
+    label = L"Gauss, $s = 3$"
+    @info "Running Gauss method with s = 3 stages" dt_gauss
+
+    empty!(series_t)
+    empty!(series_error)
+    empty!(series_runtime)
+    parameters = (; parameters..., du_tmp = similar(q0),
+                    du = similar(q0), u = similar(q0))
+    q0_real = reinterpret(Float64, q0) |> collect
+    ode = GeometricIntegrators.ODEProblem(geometric_integrators_rhs!,
+                                          tspan, dt_gauss, q0_real;
+                                          parameters)
+    alg = GeometricIntegrators.Gauss(3) # s = 3, order 2s = 6
+    solver_size = GeometricIntegrators.Integrators.nstages(alg) * length(q0_real)
+    # ForwardDiff.jl Jacobians are not compatible with FFTW
+    jacobian = GeometricIntegratorsBase.JacobianFiniteDifferences(
+        GeometricIntegratorsBase.residual!,
+        zeros(Float64, solver_size),
+    )
+    int = GeometricIntegrators.GeometricIntegrator(ode, alg; jacobian)
+    solstep = GeometricIntegratorsBase.solutionstep(
+        int, GeometricIntegrators.initialstate(ode)
+    )
+    current_state = GeometricIntegratorsBase.current(solstep)
+    nsteps = round(Int, (tspan[2] - tspan[1]) / dt_gauss)
+    isapprox(tspan[1] + nsteps * dt_gauss, tspan[2]; atol = 100eps(dt_gauss), rtol = 0) ||
+        throw(ArgumentError("The time span $(tspan) is not an integer multiple of dt = $(dt_gauss)."))
+
+    sleep(1)
+    time_initial[] = time()
+    @time for step in 1:nsteps
+        if step % 5 == 0
+            println("Gauss method, step ", step, " / ", nsteps)
+        end
+        GeometricIntegratorsBase.integrate!(solstep, int)
+        callback(reinterpret(ComplexF64, current_state.q), parameters, current_state.t)
+    end
+
+    lines!(ax_error, series_t, series_error; label)
+    lines!(ax_runtime, series_t, series_runtime; label)
+
+    # ######################################################################
+    # Finalize plot
+
+    axislegend(ax_error; position = :lt, framevisible = false, nbanks = 1)
+    axislegend(ax_runtime; position = :lt, framevisible = false, nbanks = 1)
+
+    filename = joinpath(FIGDIR, "comparison_gauss_methods.pdf")
+    save(filename, fig)
+    @info "Results saved to $filename"
+    return nothing
+end
+
 function hyperbolized_nls()
     initial_condition = three_solitons
     τ = 1.0e-9
@@ -4398,6 +4596,118 @@ function comparison_bai_et_al(; semidiscretization = FourierGalerkin(),
         @info "Errors at the final time" l2_error h1_error
     end
 
+    return nothing
+end
+
+function comparison_bai_et_al_error_growth_data(; tspan = (0.0, 1.0e3),
+                                                  alg = KenCarpARK548(),
+                                                  dt = 0.01,
+                                                  relaxation = ProjectionEnergyRelaxation(),
+                                                  N = 2^10,
+                                                  kwargs...)
+    # Initialization of physical and numerical parameters
+    local_xmin() = -40.0
+    local_xmax() = +40.0
+    β = 2
+    equation = CubicNLS(β)
+    function initial_condition(t, x, equation)
+        # They consider a single moving soliton of the form
+        # u(t, x) = cis(-2x - 3t) * sech(x + 4t)
+        # To study the error growth in time for long times, we
+        # wrap this solution in a periodic domain. First, we
+        # write it in terms of the traveling-wave variable ξ = x + 4t:
+        # u(t, ξ) = cis(-2ξ + 5t) * sech(ξ)
+        # Then, we wrap it in a periodic domain given by `xmin` and `xmax`
+        xmin = local_xmin()
+        xmax = local_xmax()
+        c = -4.0
+        x_t = mod(x - c * t - xmin, xmax - xmin) + xmin
+        return cis(-2x_t + 5t) * sech(x_t)
+    end
+
+    D = fourier_derivative_operator(local_xmin(), local_xmax(), N)
+
+    (; q0, parameters) = setup(initial_condition, equation,
+                               FourierGalerkin(), tspan, D)
+
+    series_t = Vector{Float64}()
+    series_error = Vector{Float64}()
+    callback = let series_t = series_t, series_error = series_error, initial_condition = initial_condition
+        function (q, parameters, t)
+            p_equation = parameters.equation
+            p_D_small = parameters.D_small
+            p_tmp1_small = parameters.tmp1_small
+            p_tmp2_small = parameters.tmp2_small
+
+            push!(series_t, t)
+
+            x = grid(p_D_small)
+            v = real(q, parameters.equation)
+            w = imag(q, parameters.equation)
+
+            p_D_small.tmp .= v ./ size(p_D_small, 2)
+            mul!(p_tmp1_small, p_D_small.brfft_plan, p_D_small.tmp)
+            p_D_small.tmp .= w ./ size(p_D_small, 2)
+            mul!(p_tmp2_small, p_D_small.brfft_plan, p_D_small.tmp)
+            for i in eachindex(x, p_tmp1_small, p_tmp2_small)
+                ic = initial_condition(t, x[i], p_equation)
+                p_tmp1_small[i] = (p_tmp1_small[i] - real(ic))^2 + (p_tmp2_small[i] - imag(ic))^2
+            end
+            push!(series_error, sqrt(integrate(p_tmp1_small, p_D_small)))
+
+            return nothing
+        end
+    end
+
+    @time sol = solve_imex(rhs_stiff!, operator(rhs_stiff!, parameters),
+                           rhs_nonstiff!,
+                           q0, tspan, parameters, alg;
+                           dt, callback,
+                           relaxation, relaxation_tol = 1.0e-15)
+
+    filename = joinpath(FIGDIR, "comparison_bai_et_al_error_growth__our_data.txt")
+    open(filename, "w") do io
+        data = hcat(series_t, series_error)
+        write(io, "# Time, L2error\n")
+        writedlm(io, data)
+    end
+    @info "Results saved to $filename"
+    return nothing
+end
+
+function comparison_bai_et_al_error_growth_plot()
+    filename_ours = joinpath(FIGDIR, "comparison_bai_et_al_error_growth__our_data.txt")
+    if !isfile(filename_ours)
+        throw(ArgumentError("Data file not found: $filename_ours. Please run `comparison_bai_et_al_error_growth_data()` first to generate the data."))
+        return nothing
+    end
+    data_ours = readdlm(filename_ours, comments = true)
+
+    filename_bai_et_al = joinpath(FIGDIR, "comparison_bai_et_al_error_growth__their_data.txt")
+    if !isfile(filename_bai_et_al)
+        throw(ArgumentError("Data file not found: $filename_bai_et_al. Please run `comparison_bai_et_al_error_growth_data()` first to generate the data."))
+        return nothing
+    end
+    data_bai_et_al = readdlm(filename_bai_et_al, comments = true)
+
+    fig = Figure(size = (600, 400)) # default size is (600, 450)
+
+    ax_error = Axis(fig[1, 1];
+                    xlabel = L"Time $t$",
+                    ylabel = L"Error at time $t$",
+                    xscale = log10, yscale = log10,
+                    xticks = LogTicks(WilkinsonTicks(5; k_min = 4, k_max = 6)))
+
+    lines!(ax_error, data_ours[:, 1], data_ours[:, 2];
+           label = L"$\mathcal{M}, \mathcal{P}, \mathcal{E}$ relaxation")
+    lines!(ax_error, data_bai_et_al[:, 1], data_bai_et_al[:, 2];
+           label = "Bai et al. (2023)")
+
+    axislegend(ax_error; position = :lt, framevisible = false, nbanks = 1)
+
+    filename = joinpath(FIGDIR, "comparison_bai_et_al_error_growth.pdf")
+    save(filename, fig)
+    @info "Results saved to $filename"
     return nothing
 end
 

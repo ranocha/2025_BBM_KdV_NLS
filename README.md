@@ -35,12 +35,12 @@ use the implementations provided here, please **also** cite this repository as
 
 ## Abstract
 
-We propose and study a class of arbitrarily high order numerical discretizations
+We propose and study a class of arbitrarily high-order numerical discretizations
 that preserve multiple invariants and are essentially explicit (they do not require
 the solution of any large systems of algebraic equations). In space, we use
 Fourier Galerkin methods, while in time we use a combination of orthogonal projection
 and relaxation. We prove and numerically demonstrate the conservation properties of
-the method by applying it to the Benjamin-Bona-Mahoney, Korteweg-de Vries, and
+the method by applying it to the Benjamin-Bona-Mahony, Korteweg-de Vries, and
 nonlinear Schrödinger (NLS) PDEs as well as a hyperbolic approximation of NLS.
 For each of these equations, the proposed schemes conserve mass, momentum, and
 energy up to numerical precision. We show that this conservation leads to reduced

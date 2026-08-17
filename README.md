@@ -6,12 +6,19 @@
 This repository contains information and code to reproduce the results presented
 in the article
 ```bibtex
-@online{ranocha2025conserving,
-  title={Conserving mass, momentum, and energy for the {B}enjamin-{B}ona-{M}ahony,
-         {K}orteweg-de {V}ries, and nonlinear {S}chr{\"o}dinger equations},
+@article{ranocha2026conserving,
+  title={Conserving mass, momentum, and energy for the
+         {B}enjamin-{B}ona-{M}ahony, {K}orteweg-de {V}ries, and
+         nonlinear {S}chr{\"o}dinger equations},
   author={Ranocha, Hendrik and Ketcheson, David I},
-  year={2025},
-  month={12},
+  journal={SIAM Journal on Scientific Computing},
+  volume={48},
+  number={4},
+  pages={A2314--A2341},
+  year={2026},
+  month={08},
+  publisher={SIAM},
+  doi={10.1137/25M183314X},
   eprint={2512.16352},
   eprinttype={arxiv},
   eprintclass={math.NA}
